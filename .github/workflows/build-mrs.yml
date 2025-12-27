@@ -15,7 +15,7 @@ jobs:
 
       - name: Download mihomo
         run: |
-          curl -L https://github.com/MetaCubeX/mihomo/releases/download/v1.19.18/mihomo-linux-amd64-v1.19.18.gz -o mihomo.gz
+          curl -L https://github.com/MetaCubeX/mihomo/releases/download/v1.19.18/mihomo-darwin-amd64-v1.19.18.gz -o mihomo.gz
           gunzip mihomo.gz
           chmod +x mihomo
           sudo mv mihomo /usr/local/bin/mihomo
