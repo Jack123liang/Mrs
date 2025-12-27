@@ -1,5 +1,4 @@
 name: Auto Convert List to MRS
-on:
   push:
     branches: [ "main", "master" ]
   workflow_dispatch:
