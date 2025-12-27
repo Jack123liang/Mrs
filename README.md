@@ -1,5 +1,6 @@
 # Mrs
 # Mrs - Clash Meta Rule Providers
+#
 
 自动构建 Clash Meta / Mihomo `.mrs` 二进制规则集。
 
