@@ -14,20 +14,23 @@ jobs:
 
       - name: Install Mihomo
         run: |
-          # 使用官方 Release 的直接下载链接
           wget -O mihomo.gz https://github.com/MetaCubeX/mihomo/releases/download/v1.18.9/mihomo-linux-amd64-v1.18.9.gz
           gunzip mihomo.gz
           chmod +x mihomo
 
-      - name: Convert Lists
+      - name: Format and Convert
         run: |
-          # 查找所有 .list 文件并转换
-          # 使用 -f /dev/null 配合简单命令，避免其进入服务模式
           find . -name "*.list" -type f | while read -r file; do
-            echo "正在转换: $file"
-            # 这里的关键是：如果转换成功，mihomo 会直接生成文件
-            # 我们给它 2 秒钟执行，如果它尝试启动服务，timeout 会杀掉它
-            timeout 2s ./mihomo rule-set compile "$file" "${file%.list}.mrs" || true
+            echo "正在处理: $file"
+            
+            # 创建临时文件进行格式化转换
+            # 如果一行里没有逗号（说明只是纯域名），则补全为 DOMAIN,xxx
+            sed -E '/^[^,]+$/s/(.*)/DOMAIN,\1/' "$file" > temp_format.list
+            
+            # 强制转换，超时 5 秒自动关闭
+            timeout 5s ./mihomo rule-set compile temp_format.list "${file%.list}.mrs" || true
+            
+            rm temp_format.list
           done
 
       - name: Push back
@@ -35,14 +38,12 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           
-          # 强制添加所有生成的 mrs 文件
-          git add **/*.mrs
-          
-          if git diff --staged --quiet; then
-            echo "错误：没有生成任何 .mrs 文件！"
-            echo "请检查你的 .list 文件格式是否符合 Mihomo 要求（Payload 格式或纯规则格式）。"
-            exit 1
-          else
-            git commit -m "chore: 自动生成 MRS 规则集"
+          # 检查是否有 .mrs 生成
+          if [ -n "$(find . -name "*.mrs")" ]; then
+            git add **/*.mrs
+            git commit -m "chore: 自动格式化并生成 MRS 规则"
             git push
+          else
+            echo "错误：依然未能生成 .mrs 文件，请检查 Action 日志前面的输出。"
+            exit 1
           fi
