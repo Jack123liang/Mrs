@@ -23,40 +23,62 @@ jobs:
           sudo mv mihomo /usr/local/bin/mihomo
           /usr/local/bin/mihomo --version
 
-      # 3️⃣ 转换 domain 规则
+      # 3️⃣ 列出所有规则文件，方便调试
+      - name: List rules files
+        run: |
+          echo "Domain rules:"
+          ls -l rules/domain/ || echo "No domain rules"
+          echo "IPCIDR rules:"
+          ls -l rules/ipcidr/ || echo "No ipcidr rules"
+          echo "Classical rules:"
+          ls -l rules/classical/ || echo "No classical rules"
+
+      # 4️⃣ 转换 domain 规则
       - name: Convert domain rules
         run: |
           mkdir -p mrs/domain
           shopt -s nullglob
           for file in rules/domain/*.list; do
+            if [ ! -s "$file" ]; then
+              echo "Skipping empty file: $file"
+              continue
+            fi
             name=$(basename "$file" .list)
             echo "Converting domain rule: $file"
-            /usr/local/bin/mihomo convert-ruleset -i "$file" -o "mrs/domain/$name.mrs" -t domain
+            /usr/local/bin/mihomo convert-ruleset -i "$file" -o "mrs/domain/$name.mrs" -t domain || echo "Failed to convert $file"
           done
 
-      # 4️⃣ 转换 ipcidr 规则
+      # 5️⃣ 转换 ipcidr 规则
       - name: Convert ipcidr rules
         run: |
           mkdir -p mrs/ipcidr
           shopt -s nullglob
           for file in rules/ipcidr/*.list; do
+            if [ ! -s "$file" ]; then
+              echo "Skipping empty file: $file"
+              continue
+            fi
             name=$(basename "$file" .list)
             echo "Converting ipcidr rule: $file"
-            /usr/local/bin/mihomo convert-ruleset -i "$file" -o "mrs/ipcidr/$name.mrs" -t ipcidr
+            /usr/local/bin/mihomo convert-ruleset -i "$file" -o "mrs/ipcidr/$name.mrs" -t ipcidr || echo "Failed to convert $file"
           done
 
-      # 5️⃣ 转换 classical 规则
+      # 6️⃣ 转换 classical 规则
       - name: Convert classical rules
         run: |
           mkdir -p mrs/classical
           shopt -s nullglob
           for file in rules/classical/*.list; do
+            if [ ! -s "$file" ]; then
+              echo "Skipping empty file: $file"
+              continue
+            fi
             name=$(basename "$file" .list)
             echo "Converting classical rule: $file"
-            /usr/local/bin/mihomo convert-ruleset -i "$file" -o "mrs/classical/$name.mrs" -t classical
+            /usr/local/bin/mihomo convert-ruleset -i "$file" -o "mrs/classical/$name.mrs" -t classical || echo "Failed to convert $file"
           done
 
-      # 6️⃣ 提交生成的 mrs
+      # 7️⃣ 提交生成的 mrs
       - name: Commit generated mrs
         run: |
           git config user.name "github-actions"
