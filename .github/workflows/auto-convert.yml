@@ -12,20 +12,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Rule Converter
+      - name: Install Mihomo
         run: |
-          # 下载专门的规则转换工具，它不含代理服务功能，运行即退出
-          curl -Lo converter.gz "https://github.com/MetaCubeX/mihomo-binary/releases/download/v1.18.9/mihomo-linux-amd64-v1.18.9.gz"
-          gunzip converter.gz
-          chmod +x converter
+          # 使用官方 Release 的直接下载链接
+          wget -O mihomo.gz https://github.com/MetaCubeX/mihomo/releases/download/v1.18.9/mihomo-linux-amd64-v1.18.9.gz
+          gunzip mihomo.gz
+          chmod +x mihomo
 
       - name: Convert Lists
         run: |
           # 查找所有 .list 文件并转换
-          # 注意：直接运行转换，不加 -f，专门工具不会启动服务
+          # 使用 -f /dev/null 配合简单命令，避免其进入服务模式
           find . -name "*.list" -type f | while read -r file; do
             echo "正在转换: $file"
-            ./converter rule-set compile "$file" "${file%.list}.mrs"
+            # 这里的关键是：如果转换成功，mihomo 会直接生成文件
+            # 我们给它 2 秒钟执行，如果它尝试启动服务，timeout 会杀掉它
+            timeout 2s ./mihomo rule-set compile "$file" "${file%.list}.mrs" || true
           done
 
       - name: Push back
@@ -33,12 +35,12 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           
-          # 检查是否有文件生成
-          # 使用 git add . 避免通配符报错
-          git add .
+          # 强制添加所有生成的 mrs 文件
+          git add **/*.mrs
           
           if git diff --staged --quiet; then
-            echo "错误：没有生成任何 .mrs 文件！请检查 .list 文件内容格式是否正确。"
+            echo "错误：没有生成任何 .mrs 文件！"
+            echo "请检查你的 .list 文件格式是否符合 Mihomo 要求（Payload 格式或纯规则格式）。"
             exit 1
           else
             git commit -m "chore: 自动生成 MRS 规则集"
