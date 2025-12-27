@@ -17,16 +17,16 @@ jobs:
           curl -Lo mihomo.gz "https://github.com/MetaCubeX/mihomo/releases/download/v1.18.9/mihomo-linux-amd64-v1.18.9.gz"
           gunzip mihomo.gz
           chmod +x mihomo
-          # 将其移动到系统路径，避免它在当前目录寻找 config.yaml
-          sudo mv mihomo /usr/local/bin/mihomo_tool
+          # 创建一个空配置文件，防止它卡在初始化步骤
+          touch config.yaml
 
       - name: Convert
         run: |
-          # 遍历所有 .list 文件
           find . -name "*.list" -type f | while read -r file; do
-            echo "正在转换: $file"
-            # 使用更纯净的子命令调用方式
-            mihomo_tool rule-set compile "$file" "${file%.list}.mrs"
+            echo "正在处理: $file"
+            # 使用 timeout 强制在 2 秒后结束进程
+            # 这样即便它启动了监听服务，也会被强制关闭并继续下一步
+            timeout 2s ./mihomo -f config.yaml rule-set compile "$file" "${file%.list}.mrs" || true
           done
 
       - name: Push back
@@ -34,11 +34,13 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           
+          # 检查是否有 .mrs 文件生成
           git add **/*.mrs
           
           if git diff --staged --quiet; then
-            echo "没有发现新文件"
+            echo "没有发现新生成的 .mrs 文件，请检查转换是否成功。"
+            exit 1
           else
-            git commit -m "chore: 自动生成 MRS 二进制规则"
+            git commit -m "chore: 自动同步 MRS 文件"
             git push
           fi
