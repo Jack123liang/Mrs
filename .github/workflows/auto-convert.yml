@@ -12,74 +12,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Mihomo
+      - name: Install RuleSet Converter
         run: |
-          # 强制删除可能存在的旧文件，防止 gzip 报错
-          rm -f mihomo mihomo.gz
-          wget -O mihomo.gz https://github.com/MetaCubeX/mihomo/releases/download/v1.18.9/mihomo-linux-amd64-v1.18.9.gz
-          gunzip mihomo.gz
-          chmod +x mihomo
+          # 下载专用的轻量转换工具
+          wget -O converter.tar.gz https://github.com/MetaCubeX/rule-set-converter/releases/download/v1.1.0/rule-set-converter-linux-amd64.tar.gz
+          tar -zxf converter.tar.gz
+          chmod +x rule-set-converter
 
-      - name: Python Script Conversion
-        shell: python
+      - name: Convert Rules
         run: |
-          import os
-          import subprocess
-
-          # 1. 递归查找所有 .list 文件
-          list_files = []
-          for root, dirs, files in os.walk("."):
-              for file in files:
-                  if file.endswith(".list"):
-                      list_files.append(os.path.join(root, file))
-
-          if not list_files:
-              print("No .list files found.")
-              exit(0)
-
-          for input_file in list_files:
-              output_file = input_file.replace(".list", ".mrs")
-              print(f"--- Processing: {input_file} ---")
-              
-              # 2. 读取并清洗格式 (补全 DOMAIN, 前缀)
-              processed_rules = []
-              with open(input_file, 'r') as f:
-                  for line in f:
-                      line = line.strip()
-                      # 跳过空行和注释
-                      if not line or line.startswith('#'):
-                          continue
-                      # 如果没有逗号，说明是纯域名，自动补全
-                      if ',' not in line:
-                          processed_rules.append(f"DOMAIN,{line}")
-                      else:
-                          processed_rules.append(line)
-              
-              # 3. 写入临时文件供编译
-              with open("temp_rules.txt", "w") as tmp:
-                  tmp.write("\n".join(processed_rules))
-              
-              # 4. 调用编译命令，设置 10 秒超时防止卡死
-              try:
-                  print(f"Compiling to {output_file}...")
-                  # 使用 timeout 确保进程一定能结束
-                  subprocess.run(
-                      ['./mihomo', 'rule-set', 'compile', 'temp_rules.txt', output_file],
-                      timeout=10,
-                      capture_output=True
-                  )
-                  if os.path.exists(output_file):
-                      print(f"Successfully generated: {output_file}")
-                  else:
-                      print(f"Failed to generate {output_file}")
-              except subprocess.TimeoutExpired:
-                  print(f"Timeout compiling {input_file}, moving on...")
-              except Exception as e:
-                  print(f"Error: {e}")
-
-          # 清理临时文件
-          if os.path.exists("temp_rules.txt"):
-              os.remove("temp_rules.txt")
+          # 递归查找所有 .list 文件
+          find . -name "*.list" -type f | while read -r file; do
+            echo "正在转换: $file"
+            
+            # 使用专用工具转换
+            # 自动识别类型并导出二进制 mrs
+            ./rule-set-converter [compile] -i "$file" -o "${file%.list}.mrs" || \
+            ./rule-set-converter compile -i "$file" -o "${file%.list}.mrs"
+          done
 
       - name: Push back
         run: |
@@ -87,10 +37,9 @@ jobs:
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           
           git add .
-          # 检查是否有文件变化
           if git diff --staged --quiet; then
-            echo "No new .mrs files generated."
+            echo "没有产生任何变化"
           else
-            git commit -m "chore: 自动更新 MRS 二进制规则"
+            git commit -m "chore: 使用专用工具同步 MRS 规则"
             git push
           fi
