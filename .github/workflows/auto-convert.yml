@@ -17,14 +17,16 @@ jobs:
           curl -Lo mihomo.gz "https://github.com/MetaCubeX/mihomo/releases/download/v1.18.9/mihomo-linux-amd64-v1.18.9.gz"
           gunzip mihomo.gz
           chmod +x mihomo
+          # 将其移动到系统路径，避免它在当前目录寻找 config.yaml
+          sudo mv mihomo /usr/local/bin/mihomo_tool
 
       - name: Convert
         run: |
-          # 使用 find 找到所有 .list 文件
-          for file in $(find . -name "*.list" -type f); do
-            echo "Processing $file ..."
-            # 使用 -f /dev/null 强制让 mihomo 以工具模式运行而非服务模式
-            ./mihomo -f /dev/null rule-set compile "$file" "${file%.list}.mrs"
+          # 遍历所有 .list 文件
+          find . -name "*.list" -type f | while read -r file; do
+            echo "正在转换: $file"
+            # 使用更纯净的子命令调用方式
+            mihomo_tool rule-set compile "$file" "${file%.list}.mrs"
           done
 
       - name: Push back
@@ -32,13 +34,11 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           
-          # 添加所有新生成的 mrs 文件
           git add **/*.mrs
           
           if git diff --staged --quiet; then
-            echo "No changes to commit"
+            echo "没有发现新文件"
           else
-            git commit -m "chore: auto-generate mrs files"
+            git commit -m "chore: 自动生成 MRS 二进制规则"
             git push
           fi
-
