@@ -1,1 +1,62 @@
+name: Build Clash MRS (Multi Rules)
 
+on:
+  push:
+    paths:
+      - "rules/**"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download mihomo
+        run: |
+          curl -L https://github.com/MetaCubeX/mihomo/releases/latest/download/mihomo-linux-amd64.gz -o mihomo.gz
+          gunzip mihomo.gz
+          chmod +x mihomo
+          sudo mv mihomo /usr/local/bin/mihomo
+
+      - name: Convert domain rules
+        run: |
+          mkdir -p mrs/domain
+          for file in rules/domain/*.list; do
+            name=$(basename "$file" .list)
+            mihomo convert-ruleset \
+              -i "$file" \
+              -o "mrs/domain/$name.mrs" \
+              -t domain
+          done
+
+      - name: Convert ipcidr rules
+        run: |
+          mkdir -p mrs/ipcidr
+          for file in rules/ipcidr/*.list; do
+            name=$(basename "$file" .list)
+            mihomo convert-ruleset \
+              -i "$file" \
+              -o "mrs/ipcidr/$name.mrs" \
+              -t ipcidr
+          done
+
+      - name: Convert classical rules
+        run: |
+          mkdir -p mrs/classical
+          for file in rules/classical/*.list; do
+            name=$(basename "$file" .list)
+            mihomo convert-ruleset \
+              -i "$file" \
+              -o "mrs/classical/$name.mrs" \
+              -t classical
+          done
+
+      - name: Commit generated mrs
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add mrs/
+          git commit -m "build: auto generate mrs rules" || echo "No changes"
+          git push
