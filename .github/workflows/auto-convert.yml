@@ -14,6 +14,8 @@ jobs:
 
       - name: Install Mihomo
         run: |
+          # 强制删除可能存在的旧文件，防止 gzip 报错
+          rm -f mihomo mihomo.gz
           wget -O mihomo.gz https://github.com/MetaCubeX/mihomo/releases/download/v1.18.9/mihomo-linux-amd64-v1.18.9.gz
           gunzip mihomo.gz
           chmod +x mihomo
@@ -24,43 +26,60 @@ jobs:
           import os
           import subprocess
 
-          # 查找所有 .list 文件
+          # 1. 递归查找所有 .list 文件
           list_files = []
           for root, dirs, files in os.walk("."):
               for file in files:
                   if file.endswith(".list"):
                       list_files.append(os.path.join(root, file))
 
+          if not list_files:
+              print("No .list files found.")
+              exit(0)
+
           for input_file in list_files:
               output_file = input_file.replace(".list", ".mrs")
-              print(f"Converting: {input_file} -> {output_file}")
+              print(f"--- Processing: {input_file} ---")
               
-              with open(input_file, 'r') as f:
-                  lines = f.readlines()
-              
-              # 自动补全 DOMAIN, 前缀
+              # 2. 读取并清洗格式 (补全 DOMAIN, 前缀)
               processed_rules = []
-              for line in lines:
-                  line = line.strip()
-                  if line and not line.startswith('#'):
+              with open(input_file, 'r') as f:
+                  for line in f:
+                      line = line.strip()
+                      # 跳过空行和注释
+                      if not line or line.startswith('#'):
+                          continue
+                      # 如果没有逗号，说明是纯域名，自动补全
                       if ',' not in line:
                           processed_rules.append(f"DOMAIN,{line}")
                       else:
                           processed_rules.append(line)
               
-              payload = "\n".join(processed_rules)
+              # 3. 写入临时文件供编译
+              with open("temp_rules.txt", "w") as tmp:
+                  tmp.write("\n".join(processed_rules))
               
-              # 核心修改：使用简化的 subprocess 调用，彻底规避 config.yaml 需求
+              # 4. 调用编译命令，设置 10 秒超时防止卡死
               try:
-                  # 使用 rule-set compile 直接读取处理后的内容
-                  with open("temp.list", "w") as tmp:
-                      tmp.write(payload)
-                  
-                  # 运行 compile 命令，不加载任何配置
-                  subprocess.run(['./mihomo', 'rule-set', 'compile', 'temp.list', output_file], timeout=5)
-                  print(f"Successfully generated {output_file}")
+                  print(f"Compiling to {output_file}...")
+                  # 使用 timeout 确保进程一定能结束
+                  subprocess.run(
+                      ['./mihomo', 'rule-set', 'compile', 'temp_rules.txt', output_file],
+                      timeout=10,
+                      capture_output=True
+                  )
+                  if os.path.exists(output_file):
+                      print(f"Successfully generated: {output_file}")
+                  else:
+                      print(f"Failed to generate {output_file}")
+              except subprocess.TimeoutExpired:
+                  print(f"Timeout compiling {input_file}, moving on...")
               except Exception as e:
-                  print(f"Failed to convert {input_file}: {e}")
+                  print(f"Error: {e}")
+
+          # 清理临时文件
+          if os.path.exists("temp_rules.txt"):
+              os.remove("temp_rules.txt")
 
       - name: Push back
         run: |
@@ -68,9 +87,10 @@ jobs:
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           
           git add .
+          # 检查是否有文件变化
           if git diff --staged --quiet; then
-            echo "No changes"
+            echo "No new .mrs files generated."
           else
-            git commit -m "chore: 强制生成 MRS 文件"
+            git commit -m "chore: 自动更新 MRS 二进制规则"
             git push
           fi
