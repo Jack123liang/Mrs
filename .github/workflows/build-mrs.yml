@@ -1,4 +1,4 @@
-name: Build Clash MRS (Multi Rules)
+name: Build Clash MRS (Auto Rule Type)
 
 on:
   push:
@@ -23,62 +23,42 @@ jobs:
           sudo mv mihomo /usr/local/bin/mihomo
           /usr/local/bin/mihomo --version
 
-      # 3️⃣ 列出所有规则文件
-      - name: List rules files
+      # 3️⃣ 遍历 rules 目录下所有 .list 文件
+      - name: Convert all rules
         run: |
-          echo "Domain rules:"
-          ls -l rules/domain/ || echo "No domain rules"
-          echo "IPCIDR rules:"
-          ls -l rules/ipcidr/ || echo "No ipcidr rules"
-          echo "Classical rules:"
-          ls -l rules/classical/ || echo "No classical rules"
-
-      # 4️⃣ 转换 domain 规则
-      - name: Convert domain rules
-        run: |
-          mkdir -p mrs/domain
+          mkdir -p mrs
           shopt -s nullglob
-          for file in rules/domain/*.list; do
+          for file in rules/*.list; do
             if [ ! -s "$file" ]; then
               echo "Skipping empty file: $file"
               continue
             fi
-            name=$(basename "$file" .list)
-            echo "Converting domain rule: $file"
-            /usr/local/bin/mihomo convert-ruleset -i "$file" -o "mrs/domain/$name.mrs" -t domain || echo "Warning: Failed to convert $file"
-          done
 
-      # 5️⃣ 转换 ipcidr 规则
-      - name: Convert ipcidr rules
-        run: |
-          mkdir -p mrs/ipcidr
-          shopt -s nullglob
-          for file in rules/ipcidr/*.list; do
-            if [ ! -s "$file" ]; then
-              echo "Skipping empty file: $file"
-              continue
+            name=$(basename "$file" .list)
+            echo "Processing $file"
+
+            # 自动识别规则类型
+            type="unknown"
+            first_line=$(grep -v '^#' "$file" | grep -v '^$' | head -n1 || true)
+
+            if [[ "$first_line" =~ ^IP-CIDR, ]]; then
+              type="ipcidr"
+            elif [[ "$first_line" =~ ^DOMAIN(-SUFFIX)?, ]]; then
+              type="domain"
+            else
+              type="classical"
             fi
-            name=$(basename "$file" .list)
-            echo "Converting ipcidr rule: $file"
-            /usr/local/bin/mihomo convert-ruleset -i "$file" -o "mrs/ipcidr/$name.mrs" -t ipcidr || echo "Warning: Failed to convert $file"
+
+            echo "Detected type: $type"
+
+            # 创建对应目录
+            mkdir -p "mrs/$type"
+
+            # 转换规则
+            /usr/local/bin/mihomo convert-ruleset -i "$file" -o "mrs/$type/$name.mrs" -t "$type" || echo "Warning: Failed to convert $file"
           done
 
-      # 6️⃣ 转换 classical 规则
-      - name: Convert classical rules
-        run: |
-          mkdir -p mrs/classical
-          shopt -s nullglob
-          for file in rules/classical/*.list; do
-            if [ ! -s "$file" ]; then
-              echo "Skipping empty file: $file"
-              continue
-            fi
-            name=$(basename "$file" .list)
-            echo "Converting classical rule: $file"
-            /usr/local/bin/mihomo convert-ruleset -i "$file" -o "mrs/classical/$name.mrs" -t classical || echo "Warning: Failed to convert $file"
-          done
-
-      # 7️⃣ 提交生成的 mrs
+      # 4️⃣ 提交生成的 mrs
       - name: Commit generated mrs
         run: |
           git config user.name "github-actions"
